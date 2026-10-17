@@ -14,7 +14,8 @@ CLI) and the Docker image. The dashboard is a separate repo and is not started h
 | CLI (`npx arkiv-triggers`, `new-key`, `/healthz`) | Done, run live |
 | Docker image | Rebuilt with every change below and run in the WSL Docker with production settings: healthy in about 10 s, fires an assigned rule 0–1 blocks late, resumes from its saved block, exits 0 on SIGTERM |
 | Docs: README, `arkiv/schema.md`, `arkiv/friction.md` (12 entries), spikes | Done |
-| npm publish, Railway deploy, GitHub push | **Not done.** Each needs the owner's go-ahead. The folder is not a git repo yet |
+| GitHub | Pushed to https://github.com/soumyacodes007/arkiv-triggers (`main`, first commit `262efab`, 18 Oct) |
+| npm publish, Railway deploy | **Not done.** Each needs the owner's go-ahead |
 
 ## Evidence (all on Tiramisu, 17 Oct 2026)
 
@@ -93,16 +94,15 @@ is at least once, which is why webhooks carry a stable `x-trg-event` ID.
 
 ## What is left, in order
 
-1. **GitHub** (needs the go-ahead): `git init`, check `git status` shows no `.env.local`, first commit, push.
-2. **npm** (needs the go-ahead): bump `version` to `0.1.0`, `npm run build`, read `npm pack --dry-run`
+1. **npm** (needs the go-ahead): bump `version` to `0.1.0`, `npm run build`, read `npm pack --dry-run`
    (only `dist`, `README.md`, `LICENSE`, `package.json`), `npm publish`.
-3. **Railway public worker** (needs the go-ahead): deploy `docker/worker.Dockerfile`; set
+2. **Railway public worker** (needs the go-ahead): deploy `docker/worker.Dockerfile`; set
    `WORKER_KEY` (a dedicated funded wallet), `TG_TOKEN`, and **`ARKIV_ACCESS_KEY` (required, and a key of its
    own, not the one the live tests use)**; health check path `/healthz` (Railway sets `PORT`). Without a key the
    worker runs on the anonymous budget, which a day of traffic used up (friction #10); a key shared with test runs
    also runs out (#12). Check it with `DEPLOYED_WORKER=0x… npm run test:live:deployed`, then put its address in
    the README and `arkiv/schema.md`.
-4. **Dashboard repo** (owner sets it up): it installs `arkiv-triggers` from npm, so step 2 comes first.
+3. **Dashboard repo** (owner sets it up): it installs `arkiv-triggers` from npm, so step 1 comes first.
 
 ## Known limits (honest list)
 

@@ -53,7 +53,7 @@ Full hand-off, with how to run everything: [HANDOFF.md](HANDOFF.md).
 | 0–3 | Done | `npm test` 25/25 (local); `npm run test:live:sdk` 7/7 |
 | 4 | Done | `npm run test:live:worker` 13/13 (expire→receipt 0 blocks late, block→signed webhook, deleted target→`skipped`, extend); `npm run test:live:network` 21/21 with two workers (a, b); `NET_RULES=100 npm run test:live:network`: 100/100 fired, 0 duplicates, 100% within 3 blocks (median 1); `npm run test:live:telegram` 6/6 (real message sent, chat stored only sealed, receipt holds the message ID, 1 block late) |
 | 5 | Done locally | CLI (`new-key`, `/healthz`, signal handling, unfunded-wallet check) run live; Docker image rebuilt and checked live (`npm run test:live:deployed` 4/4 against the container); `npm pack --dry-run` lists only `dist`; `npx arkiv-triggers` runs from the packed tarball |
-| Ship | **Not done, needs the go-ahead** | npm publish, Railway deploy of the public worker, GitHub push (not yet a git repo) |
+| Ship | GitHub done; **npm and Railway need the go-ahead** | Pushed to github.com/soumyacodes007/arkiv-triggers (18 Oct); npm publish and the Railway public worker are pending |
 
 What the two-worker tests changed in the worker (details in HANDOFF.md): claims are written 8 blocks
 before a deadline; a worker acts only with ≥ 18 blocks of lease left (extending its own claim if

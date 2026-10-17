@@ -1,5 +1,7 @@
 # arkiv-triggers
 
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/ocVIqZ)
+
 Database triggers for [Arkiv](https://arkiv.network). When an entity expires, or a block (a date and
 time) arrives, something happens: a Telegram message, a signed webhook, an extension, or just a
 recorded receipt. Rules live on Arkiv, open-source workers carry them out, and every firing leaves a
@@ -142,6 +144,11 @@ app.post("/hooks/hold-expired", express.text({ type: "*/*" }), async (req, res) 
 Works the same from n8n, Make or Zapier: their webhook URL is just another URL.
 
 ## Running a worker
+
+For one-click hosting, use the Railway button above. Enter your own funded `WORKER_KEY` and
+`ARKIV_ACCESS_KEY`; add `TG_TOKEN` only if you want Telegram. The template uses
+`docker/worker.Dockerfile`, `/healthz`, and one replica. Keep that worker wallet off other running
+workers.
 
 Pick whichever fits; all three run the same code.
 

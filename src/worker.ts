@@ -40,7 +40,7 @@ import { describeError, pageAll } from "./query"
 import { workerSealKeys } from "./seal"
 import { type BlockClock, toDate } from "./time"
 
-export const WORKER_VERSION = "arkiv-triggers/0.1.0"
+export const WORKER_VERSION = "arkiv-triggers/0.1.1"
 const DEFAULT_RPC_URL = "https://rpc.tiramisu.db-chain.testnet.arkiv.network"
 const DEFAULT_WS_URL = "wss://rpc.tiramisu.db-chain.testnet.arkiv.network"
 /** Where Arkiv emits its entity events. Not exported by the SDK (see arkiv/friction.md). */

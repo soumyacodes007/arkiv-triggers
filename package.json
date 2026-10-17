@@ -1,0 +1,62 @@
+{
+  "name": "arkiv-triggers",
+  "version": "0.0.0",
+  "description": "Database triggers for Arkiv: when an entity expires or a time arrives, open-source workers send a Telegram message, call a webhook or record a receipt, and sign a receipt anyone can check.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
+    }
+  },
+  "bin": {
+    "arkiv-triggers": "./dist/cli.js",
+    "arkiv-triggers-worker": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "spike": "tsx",
+    "test:live:sdk": "tsx test/live/sdk.live.ts",
+    "test:live:worker": "tsx test/live/worker.live.ts",
+    "test:live:network": "tsx test/live/network.live.ts",
+    "test:live:telegram": "tsx test/live/telegram.live.ts",
+    "test:live:deployed": "tsx test/live/deployed.live.ts"
+  },
+  "dependencies": {
+    "@arkiv-network/sdk": "0.8.1",
+    "@noble/ciphers": "2.4.0",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0"
+  },
+  "peerDependencies": {
+    "viem": "^2.57.4"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "tsup": "9.0.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "viem": "2.57.4"
+  },
+  "keywords": [
+    "arkiv",
+    "triggers",
+    "expiry",
+    "webhook",
+    "telegram",
+    "worker"
+  ]
+}

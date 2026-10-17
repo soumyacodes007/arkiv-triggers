@@ -160,10 +160,17 @@ export function createTriggers(opts: TriggersOptions = {}) {
       all((c) => c.select(FULL).where(and(where)).createdBy(filter.creator), parseRule),
       listReceipts({ creator: filter.creator }),
     ])
+    // A rule with a receipt is finished: its receipt records the deadline, so its target need not be
+    // read again. Rules that share a target read it once. (Each read is a query against the quota.)
+    const lookups = new Map<string, Promise<{ deadline?: bigint; targetExpiresAt?: bigint }>>()
     const out = await Promise.all(
       rules.map(async (rule) => {
         const mine = receipts.filter((r) => r.rule.toLowerCase() === rule.key.toLowerCase())
-        return { ...rule, ...(await deadlineFor(rule)), status: statusOf(mine), receipts: mine }
+        const status = statusOf(mine)
+        if (status === "fired") return { ...rule, deadline: mine[0].deadline, status, receipts: mine }
+        const k = rule.trigger.on === "expire" ? `${rule.trigger.target.toLowerCase()}:${rule.trigger.offset ?? 0n}` : rule.key
+        if (!lookups.has(k)) lookups.set(k, deadlineFor(rule))
+        return { ...rule, ...(await lookups.get(k)!), status, receipts: mine }
       }),
     )
     return out.sort((a, b) => (a.deadline ?? 0n) < (b.deadline ?? 0n) ? -1 : 1)

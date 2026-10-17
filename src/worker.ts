@@ -78,6 +78,9 @@ export type WorkerOptions = {
   accessKey?: string
   /** How often to check deadlines. Default 4000 ms (two blocks). */
   pollMs?: number
+  /** Least time between two full rule reloads when the event feed says something changed (default 30 s).
+   * The feed is unfiltered, so on a busy chain it says so every block; each reload is several queries. */
+  reloadMs?: number
   /** How often to renew the heartbeat. Default 60000 ms. */
   heartbeatMs?: number
   /** Development only: let webhooks reach localhost and private addresses. */
@@ -186,7 +189,8 @@ export async function startWorker(opts: WorkerOptions): Promise<WorkerHandle> {
   const targets = new Map<string, { expiresAt?: bigint; gone: boolean; checkedAt: number }>()
   const stats: WorkerStats = { rules: 0, fired: 0, failed: 0, skipped: 0, lastBlock: 0n }
   let rulesDirty = true
-  let ticks = 0
+  let lastLoad = 0
+  const reloadMs = opts.reloadMs ?? 30_000
   let stopped = false
   let heartbeatKey: Hex | undefined
   let receiptScanFrom: bigint | undefined
@@ -219,12 +223,16 @@ export async function startWorker(opts: WorkerOptions): Promise<WorkerHandle> {
     receiptScanFrom = head
     stats.rules = rules.size
     rulesDirty = false
+    lastLoad = Date.now()
   }
 
-  async function targetState(target: Hex, fresh = false) {
+  /** A target's expiry. Extensions and deletes arrive as events, so a target far from its deadline is
+   * re-read every 10 minutes, and one within 10 minutes of it every 30 s; firing always re-reads it. */
+  async function targetState(target: Hex, fresh = false, head?: bigint) {
     const k = lower(target)
     const cached = targets.get(k)
-    if (cached && !fresh && Date.now() - cached.checkedAt < 30_000) return cached
+    const far = cached?.expiresAt !== undefined && head !== undefined && cached.expiresAt - head > 300n
+    if (cached && !fresh && Date.now() - cached.checkedAt < (far ? 600_000 : 30_000)) return cached
     let state: { expiresAt?: bigint; gone: boolean; checkedAt: number }
     try {
       const e = await reader.getEntity(target)
@@ -454,7 +462,8 @@ export async function startWorker(opts: WorkerOptions): Promise<WorkerHandle> {
     ticking = true
     try {
       const head: bigint = await reader.getBlockNumber()
-      if (rulesDirty || ticks++ % 15 === 0) await loadRules()
+      const since = Date.now() - lastLoad
+      if ((rulesDirty && since >= reloadMs) || since >= 2 * reloadMs) await loadRules()
       const open = [...rules].filter(([k]) => {
         if (done.has(k) || inFlight.has(k)) return false
         const wait = backoff.get(k)
@@ -462,7 +471,7 @@ export async function startWorker(opts: WorkerOptions): Promise<WorkerHandle> {
       })
       // Refresh expire rules' targets 16 at a time (each is a getEntity; cached for 30 s).
       const targetsOf = open.flatMap(([, r]) => (r.trigger.on === "expire" ? [r.trigger.target] : []))
-      for (let i = 0; i < targetsOf.length; i += 16) await Promise.all(targetsOf.slice(i, i + 16).map((t) => targetState(t)))
+      for (let i = 0; i < targetsOf.length; i += 16) await Promise.all(targetsOf.slice(i, i + 16).map((t) => targetState(t, false, head)))
       const due: Due[] = []
       for (const [, rule] of open) {
         if (due.length >= MAX_BATCH) break

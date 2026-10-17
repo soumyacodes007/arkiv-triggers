@@ -121,6 +121,15 @@ Tiramisu (chain 7738577) · Windows 11 · 17 Oct 2026. Spike scripts read keys f
 - **Reproduce:** run the live suites on one key until queries fail, then `curl -D -` any `arkiv_query` with that key.
 - **Our workaround:** worker logs now name the cause in one line ("Arkiv quota for this access key is used up…", `describeError` in `src/query.ts`), and the deployed public worker gets its own key.
 
+### 13. Nothing selects "entities created since block N", so a worker re-reads every rule
+
+- **What we tried:** on 18 Oct, after finding a worker had used 13% of a fresh access key's monthly quota in about 40 minutes, a query for only the rules created since the last reload: `type = "trg.rule" && $createdAt >= u64(n)` (`spike/06-created-since.ts`).
+- **What happened:** the node refuses it, with a clear message: `"$createdAt" is returned in query results but carries no index, so it cannot be filtered on.` Combined with #6 (the event feed is unfiltered and carries no attributes), a worker learns that *something* was created, but can only find out whether it was a rule by re-reading every rule. On a busy chain that is every block.
+- **What we expected:** a filterable `$createdAt` (as `$expiresAt` is), or a feed filtered by attribute, so a worker can fetch only new rules.
+- **Why it matters:** quota. Each query costs the same whatever it returns (`Arkiv-Cost: 100` here), and the quota size of a key is not documented (#12). Our first worker reloaded on every event and would have used a month's key in hours.
+- **Reproduce:** `npx tsx spike/06-created-since.ts`. To size a worker, `node spike/count-worker.mjs 420` counts its calls by method.
+- **Our workaround:** the worker reloads rules at most every 30 s (`reloadMs`) and re-reads a watched entity every 10 minutes unless it is within 10 minutes of its deadline, since extensions and deletes arrive as events; it always re-reads before firing. Measured: 67 `arkiv_query` calls in 7 minutes with about 430 rules on the chain, firing included, against several a second before. The cost is up to 30 s of latency for a rule created less than half a minute before its deadline. The SDK's `listRules` no longer reads the target of a rule that already has a receipt.
+
 ## What went smoothly (tested the same way)
 
 | Tested | Expected | Happened | Script |

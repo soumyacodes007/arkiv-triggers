@@ -13,7 +13,7 @@ CLI) and the Docker image. The dashboard is a separate repo and is not started h
 | Actions: receipt, signed webhook, extend, Telegram | Done, all four tested live (Telegram sent a real message) |
 | CLI (`npx arkiv-triggers`, `new-key`, `/healthz`) | Done, run live |
 | Docker image | Rebuilt with every change below and run in the WSL Docker with production settings: healthy in about 10 s, fires an assigned rule 0–1 blocks late, resumes from its saved block, exits 0 on SIGTERM |
-| Docs: README, `arkiv/schema.md`, `arkiv/friction.md` (12 entries), spikes | Done |
+| Docs: README, `arkiv/schema.md`, `arkiv/friction.md` (13 entries), spikes | Done |
 | GitHub | Pushed to https://github.com/soumyacodes007/arkiv-triggers (`main`, first commit `262efab`, 18 Oct) |
 | npm publish, Railway deploy | **Not done.** Each needs the owner's go-ahead |
 
@@ -114,8 +114,12 @@ is at least once, which is why webhooks carry a stable `x-trg-event` ID.
 
 - **Load sharing is first-come.** Whoever claims first fires; in one run worker-b fired all 20
   race rules. Correct, but not balanced. Rendezvous hashing over live heartbeats would spread it.
-- **Rule reloads follow any chain event.** The event feed cannot be filtered (friction #6), so on a
-  busy chain a worker reloads rules about every tick. Fine on testnet; worth a rate limit later.
+- **Quota is the worker's real limit.** Rule reloads are capped at one per 30 s and far-off targets are
+  re-read every 10 minutes (friction #13). Measured on 18 Oct: about 10 `arkiv_query` calls a minute
+  (~14,000 a day) with ~430 rules on the chain. A key's monthly quota is not documented; check
+  `Arkiv-Quota-Used-Percent` daily, and give the public worker a key nothing else uses.
+- **A rule created less than ~30 s before its deadline** can fire up to 30 s late (the reload cap). The
+  dashboard's shortest test entity is 1.5 minutes, which leaves room.
 - **Rules stay loaded until they expire** (deadline + 7 days). Fired ones are skipped in memory, but
   each reload still reads them.
 - **A target already gone when a worker first sees it** gets "now" as its deadline, so two workers

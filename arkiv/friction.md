@@ -100,7 +100,8 @@ Tiramisu (chain 7738577) · Windows 11 · 17 Oct 2026. Spike scripts read keys f
 - **What we expected:** a typed error from the SDK (for example `RateLimitedError` with the reset time), so callers can say "set an access key" instead of appearing frozen.
 - **Why it matters:** a public worker, or a dashboard on the anonymous browser quota (#4), looks dead with no clue why. The budget is cost-based (`Arkiv-Cost: 100` per query here), separate from the `RateLimit: limit=600` header, and its window is not documented.
 - **Reproduce:** exhaust the anonymous budget (run the live suites without `ARKIV_ACCESS_KEY` a few times), then run any `select(...)` query; compare with a raw `fetch` of `arkiv_query`, which shows the 429.
-- **Our workaround:** every query in this package fails after 30 s with `QueryTimeoutError` naming the access key (`src/query.ts`); the CLI warns at startup when no access key is set.
+- **Our workaround:** every query in this package fails after 30 s with `QueryTimeoutError` naming the access key (`src/query.ts`); the CLI warns at startup when no access key is set. The dashboard, which cannot hold a key, builds its client with `http(url, { retryCount: 0 })`: then the same 429 surfaces in about 1.5 s as `HttpRequestError` with `details: "ANON_COST_LIMITED"`, and the page shows a "reads are being limited" banner and retries on its own schedule.
+- **Also seen in the browser (18 Oct):** a day of building and screenshotting the dashboard from one IP was enough to exhaust the anonymous budget; one page load costs about 12 calls (5 `arkiv_query`), so a normal visitor is far from it.
 
 ### 11. The WebSocket closes every minute or so, and viem's default reconnect can snowball
 
@@ -115,7 +116,7 @@ Tiramisu (chain 7738577) · Windows 11 · 17 Oct 2026. Spike scripts read keys f
 
 - **What we tried:** the two-worker suite (`npm run test:live:network`) with `ARKIV_ACCESS_KEY` on 17 Oct, after a day of live test runs on the same key.
 - **What happened:** every `arkiv_query` returned `HTTP 429 {"error":"QUOTA_EXCEEDED","message":"quota exhausted"}`, with `Arkiv-Quota-Used-Percent: 100`, but no `Retry-After` and no reset time. Unlike #10, this 429 does reach the SDK caller, as viem's `HttpRequestError` whose first line is only `HTTP request failed.` (the reason is in `details`, after the request body).
-- **What we expected:** a reset time (a `Retry-After`, or a `RateLimit-Reset`), and a documented quota size and window per key.
+- **What we expected:** a reset time (a `Retry-After`, or a `RateLimit-Reset`), and a documented quota size and window per key. The only hint is in the anonymous 429's message ("get an API key at https://hub.arkiv.network for a monthly quota"), which suggests an exhausted key stays exhausted until the month turns.
 - **Why it matters:** a public worker that shares a key with test runs stops working with no way to know when it comes back. It also shows that a production worker needs its own key.
 - **Reproduce:** run the live suites on one key until queries fail, then `curl -D -` any `arkiv_query` with that key.
 - **Our workaround:** worker logs now name the cause in one line ("Arkiv quota for this access key is used up…", `describeError` in `src/query.ts`), and the deployed public worker gets its own key.

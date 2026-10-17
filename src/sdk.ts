@@ -78,6 +78,9 @@ export type WatchHandlers = {
   /** "live" while the WebSocket is connected, "reconnecting" while it is being restored. */
   onStatus?: (s: "live" | "reconnecting") => void
   onError?: (e: Error) => void
+  /** The least time between two refreshes, however busy the chain is. Default 1000 ms; a browser on
+   * the anonymous quota should use more. */
+  minIntervalMs?: number
 }
 
 export function createTriggers(opts: TriggersOptions = {}) {
@@ -233,7 +236,7 @@ export function createTriggers(opts: TriggersOptions = {}) {
       }
     }
 
-    // At most one refresh per second, however busy the chain is.
+    // At most one refresh per minIntervalMs (1 s by default), however busy the chain is.
     let pending = false
     let running = false
     async function schedule() {
@@ -248,7 +251,7 @@ export function createTriggers(opts: TriggersOptions = {}) {
       } catch (e) {
         h.onError?.(e as Error)
       } finally {
-        await new Promise((r) => setTimeout(r, 1_000))
+        await new Promise((r) => setTimeout(r, h.minIntervalMs ?? 1_000))
         running = false
         if (pending && !stopped) {
           pending = false

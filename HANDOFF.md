@@ -2,7 +2,7 @@
 
 ## Worker recovery build (19 Oct 2026)
 
-Build 0.1.2 uses fail-fast 429 handling and a supervisor restart after 120 seconds without completed block progress, including startup. It keeps one tick active until it finishes; it does not start overlapping passes after a Promise timeout. Target read failures remain errors unless Arkiv returns NoEntityFoundError. Railway must have restart policy ALWAYS and exactly one replica. A new worker-specific access key is configured separately in Railway, never in this repository.
+Build 0.1.2 uses fail-fast 429 handling and a supervisor restart after 120 seconds without completed block progress, including startup. It keeps one tick active until it finishes; it does not start overlapping passes after a Promise timeout. Target read failures remain errors unless Arkiv returns NoEntityFoundError. Keep exactly one replica. ALWAYS is available on paid Railway plans; the active trial is limited to ON_FAILURE with 10 retries. A new worker-specific access key is configured separately in Railway, never in this repository.
 
 Validation before deployment: 31 unit tests, TypeScript checking and the production build passed. A read using the Railway-configured key succeeded.
 
@@ -136,3 +136,12 @@ is at least once, which is why webhooks carry a stable `x-trg-event` ID.
 - **Only two funded worker wallets**, so the three-worker setup from the old plan was not tested.
 - Poora Mila (`../poora-mila`, paused) has the same `patchEntity({ attributes })` bug fixed here
   (friction #7); not touched, by request.
+
+
+## Recovery deployment verified (19 Oct 2026)
+
+- Runtime: arkiv-triggers/0.1.2, deployment b6bec48b-f1c9-4a21-9cd9-a793bc331973, built from a clean worker-only archive of GitHub a259066.
+- The new worker-specific access key lives in Railway service variables only.
+- Health returned HTTP 200 and completed block progress continued after the smoke test.
+- The deployed-worker suite passed 4/4: one successful receipt, signed by worker-b, at block 751365 for a deadline of 751364.
+- Exactly one replica in sfo, zero overlap and zero draining. Actual restart policy is ON_FAILURE with 10 retries: the current Railway trial does not support ALWAYS. See https://docs.railway.com/deployments/restart-policy.

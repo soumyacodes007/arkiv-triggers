@@ -1,4 +1,4 @@
-# The Arkiv Triggers worker as a container. Build from the repo root:
+# The OpenTrigger worker as a container. Build from the repo root:
 #   docker build -f docker/worker.Dockerfile -t arkiv-triggers-worker .
 #   docker run --env-file .env -p 8080:8080 arkiv-triggers-worker
 # Settings come from the environment only (see .env.example); no key is ever baked into the image.

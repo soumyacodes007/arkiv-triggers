@@ -1,7 +1,7 @@
 {
   "name": "arkiv-triggers",
   "version": "0.1.2",
-  "description": "Database triggers for Arkiv: when an entity expires or a time arrives, open-source workers send a Telegram message, call a webhook or record a receipt, and sign a receipt anyone can check.",
+  "description": "OpenTrigger. Rules on Arkiv. Actions on time. Database triggers for Arkiv: when an entity expires or a time arrives, open-source workers send a Telegram message, call a webhook or record a receipt, and sign a receipt anyone can check.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -41,7 +41,8 @@
     "test:live:worker": "tsx test/live/worker.live.ts",
     "test:live:network": "tsx test/live/network.live.ts",
     "test:live:telegram": "tsx test/live/telegram.live.ts",
-    "test:live:deployed": "tsx test/live/deployed.live.ts"
+    "test:live:deployed": "tsx test/live/deployed.live.ts",
+    "evidence": "tsx scripts/evidence.ts"
   },
   "dependencies": {
     "@arkiv-network/sdk": "0.8.1",
@@ -60,6 +61,7 @@
     "viem": "2.57.4"
   },
   "keywords": [
+    "opentrigger",
     "arkiv",
     "triggers",
     "expiry",

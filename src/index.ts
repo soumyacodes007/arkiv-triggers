@@ -1,4 +1,4 @@
-// arkiv-triggers SDK: create rules, read receipts and workers, watch them live.
+// OpenTrigger SDK (published as arkiv-triggers): create rules, read receipts and workers, watch them live.
 // The worker lives in "arkiv-triggers/worker" so apps that only write rules never load it.
 
 export * from "./schema"

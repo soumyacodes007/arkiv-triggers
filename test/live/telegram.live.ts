@@ -42,7 +42,7 @@ const rule = await t.createRule({
   action: "telegram",
   worker: workerB,
   chat: sealForWorker(chatId, workerSealKeys(keyB).publicKey),
-  message: "✅ Arkiv Triggers live test: {rule} fired at {time}",
+  message: "✅ OpenTrigger live test: {rule} fired at {time}",
 })
 console.log(`rule ${rule.key.slice(0, 10)}… due at block ${head + 20n}`)
 

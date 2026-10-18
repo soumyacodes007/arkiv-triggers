@@ -1,4 +1,6 @@
-# arkiv-triggers
+# OpenTrigger
+
+**Rules on Arkiv. Actions on time.**
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/ocVIqZ)
 
@@ -7,8 +9,78 @@ time) arrives, something happens: a Telegram message, a signed webhook, an exten
 recorded receipt. Rules live on Arkiv, open-source workers carry them out, and every firing leaves a
 receipt on Arkiv whose `$creator` is the worker that did it.
 
+The OpenTrigger SDK and CLI are published as `arkiv-triggers` on npm.
+
 Arkiv emits no event when an entity expires, so until now every app that cared ran its own cron
 script. This package is that script, shared: write a rule, and any worker on the network fires it.
+
+## For judges
+
+| | |
+|---|---|
+| **Dashboard (live app)** | https://arkiv-triggers-dashboard.vercel.app · source: [soumyacodes007/dashboard-tiggers](https://github.com/soumyacodes007/dashboard-tiggers) |
+| **Docs** | https://arkiv-triggers-docs.vercel.app/docs |
+| **npm** | [`arkiv-triggers`](https://www.npmjs.com/package/arkiv-triggers) (SDK, worker and CLI) |
+| **Public worker** | `0xf856952A77F9439a55Ad418f5BB3928f4CE807Db` on Railway · health: https://public-worker-production.up.railway.app/healthz |
+| **Run your own worker** | [One-click deploy on Railway](https://railway.com/deploy/ocVIqZ), `npx arkiv-triggers`, or `docker/worker.Dockerfile` |
+| **Proof** | [`PROOF.md`](PROOF.md): every claim with explorer links; rebuild it with `npm run evidence` |
+| **Schema and friction** | [`arkiv/schema.md`](arkiv/schema.md) · [`arkiv/friction.md`](arkiv/friction.md) |
+
+### Try it in 2 minutes (no Telegram needed)
+
+1. Open the dashboard and connect a wallet. It adds the Tiramisu network for you; get test GLM from
+   the [faucet](https://hub.arkiv.network/faucet).
+2. Create a rule: **At a date and time**, two minutes from now, action **Record a receipt**. Publish.
+3. Wait for the time to pass. The receipt appears in **Activity**, fired by the public worker, with a
+   link to the explorer. Its `$creator` is the worker's wallet, so anyone can check who fired it.
+
+Optional: connect Telegram in the dashboard (tap Start on the bot, paste the chat code it replies
+with) and pick **Telegram me**. The chat ID is stored only sealed to the worker's key.
+
+### Reproduce it from code
+
+```bash
+npm install arkiv-triggers @arkiv-network/sdk viem
+```
+
+The [Quickstart](#quickstart) below creates a rule in one line. From a clone of this repo:
+
+```bash
+npm ci
+npm test                    # 27 unit tests, no network
+npm run test:live:worker    # needs a funded WORKER_A_PRIVATE_KEY and an ARKIV_ACCESS_KEY in .env.local
+npm run test:live:network   # two workers; also needs WORKER_B_PRIVATE_KEY
+```
+
+The exact queries behind every claim (paste into any Arkiv query tool; the SDK sends this form):
+
+```
+type = str('trg.rule') AND $creator = addr(0xYourWallet)                                  rules you created
+type = str('trg.receipt') AND rule = str('0xrulekey')                                      what happened to one rule
+type = str('trg.receipt') AND $creator = addr(0xf856952A77F9439a55Ad418f5BB3928f4CE807Db)   everything the public worker fired
+type = str('trg.worker')                                                                    live workers (heartbeats)
+```
+
+### What we measured (Tiramisu, 18 Oct 2026)
+
+| Test | Result |
+|---|---|
+| One worker: expire → receipt, time → signed webhook, deleted target → `skipped`, auto-extend | 13/13 checks; fired 0–2 blocks after the deadline |
+| Two workers sharing rules: crash takeover, downtime catch-up, 20-rule race | 21/21 checks; 0 duplicates |
+| Two workers, 100 rules due within 25 blocks | 100/100 fired, **0 duplicates**, all within 3 blocks (median 1) |
+| Telegram action, end to end | 6/6 checks; real message sent, chat ID sealed on Arkiv |
+
+### On-chain evidence
+
+Every rule, claim, receipt and heartbeat is an entity whose `$creator` is the wallet that wrote it.
+The wallets and their roles are in [`arkiv/schema.md`](arkiv/schema.md#wallets-on-tiramisu).
+
+### Built during the hackathon
+
+All code was written between 17 and 18 October 2026 (first commit 18 Oct, 00:56 IST). Reused, and
+disclosed here: a planning document dated 8 October with no code
+([`docs/archive`](docs/archive)), and the dashboard's visual design, which uses the gr8r-studio CSS
+design system unchanged. The Arkiv integration and all logic are new.
 
 ## Quickstart
 

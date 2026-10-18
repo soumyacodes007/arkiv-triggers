@@ -422,6 +422,7 @@ export type HeartbeatInput = {
 export type Heartbeat = HeartbeatInput & { key: Hex; worker: Hex; createdAt: bigint; expiresAt: bigint }
 
 /** The message an operator signs to link their main wallet to a worker. */
+// Keep this signed protocol string stable across the OpenTrigger rebrand so existing proofs verify.
 export const operatorMessage = (worker: Hex) => `I operate Arkiv Triggers worker ${worker.toLowerCase()}`
 
 export function heartbeatToCreate(h: HeartbeatInput): CreateEntityParameters {

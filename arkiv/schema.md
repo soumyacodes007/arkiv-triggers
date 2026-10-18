@@ -1,6 +1,6 @@
 # Arkiv schema
 
-Everything Arkiv Triggers stores on Arkiv (Tiramisu testnet, chain 7738577), written with
+Everything OpenTrigger stores on Arkiv (Tiramisu testnet, chain 7738577), written with
 `@arkiv-network/sdk` 0.8.1. The source of truth is [`src/schema.ts`](../src/schema.ts); this page
 describes it.
 
@@ -148,7 +148,7 @@ valid. `x` is a lowercase hex value.
 
 | Who | Purpose | Query |
 |---|---|---|
-| Worker | Load rules (every ~60 s, or when the event feed shows a change) | `type = "trg.rule"` (+ `app = …` if the worker is limited to one app) |
+| Worker | Load rules (at most every 30 s when the event feed shows a change, and every 60 s regardless) | `type = "trg.rule"` (+ `app = …` if the worker is limited to one app) |
 | Worker | Rules already finished (first full, then incremental) | `type = "trg.receipt"` and `firedat >= u64(lastScan - 300)` |
 | Worker | Who holds which rule? (once before claiming, then until our claims are visible) | `type = "trg.claim"`: every live claim on the chain, which stays small because claims live 60 s |
 | Worker | Was any of these rules fired already? (just before acting) | `type = "trg.receipt"` and `firedat >= u64(earliest deadline - 300)` |
@@ -177,8 +177,15 @@ type = str('trg.worker')
 
 ## Wallets on Tiramisu
 
-| Role | Address |
-|---|---|
-| Worker A (our public worker, test runs) | `0x1c92087EC55B3B4114c7647ECADe3ab0b494C9b6` |
+Every entity's `$creator` is the wallet that wrote it, so each role below can be checked on the
+[explorer](https://tiramisu.explorer.arkiv.network).
 
-Every receipt, claim and heartbeat from our worker has this address as `$creator`.
+| Role | Address | Writes |
+|---|---|---|
+| Public worker (Railway, `public-worker-production.up.railway.app`) | [`0xf856952A77F9439a55Ad418f5BB3928f4CE807Db`](https://tiramisu.explorer.arkiv.network/address/0xf856952A77F9439a55Ad418f5BB3928f4CE807Db) | `trg.claim`, `trg.receipt`, `trg.worker` for every public rule it fires; also worker B in the two-worker tests |
+| Test runner | [`0x1c92087EC55B3B4114c7647ECADe3ab0b494C9b6`](https://tiramisu.explorer.arkiv.network/address/0x1c92087EC55B3B4114c7647ECADe3ab0b494C9b6) | Test targets and `trg.rule` entities in the live suites, and `trg.claim` / `trg.receipt` / `trg.worker` as worker A |
+| Rule authors | Their own wallets | `trg.rule` from the dashboard or the SDK. OpenTrigger never holds them |
+
+A worker's key lives only in its own environment (Railway variables, a local `.env`), never on
+Arkiv. Bot tokens and access keys are server-side secrets; Telegram chat IDs are stored only sealed
+to one worker's key.

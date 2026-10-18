@@ -1,8 +1,8 @@
-# Arkiv Triggers: Team Vision
+# OpenTrigger: Team Vision
 
 Oct 17, 2026 · @rick
 
-Arkiv Triggers is database triggers for Arkiv. When data on Arkiv expires, is created or changes, something happens: a Telegram message, a webhook call, or a recorded receipt. Rules live on Arkiv, open-source workers carry them out, and every action leaves a signed receipt anyone can check.
+OpenTrigger is database triggers for Arkiv. When data on Arkiv expires, is created or changes, something happens: a Telegram message, a webhook call, or a recorded receipt. Rules live on Arkiv, open-source workers carry them out, and every action leaves a signed receipt anyone can check.
 
 Where we are: the trigger engine and the worker are already built. What's left is packaging them for other developers, and building the dashboard people use to create rules. Submission is due Oct 18, 2026.
 
@@ -14,7 +14,7 @@ Arkiv sends no event when an entity expires. It just quietly disappears. So ever
 
 Two pieces of proof that this gap is real:
 
-- **Arkiv itself lists it as unbuilt.** The Arkiv ecosystem page names "Arkiv Triggers: a worker network that reacts to expiration or state changes and writes signed receipts back to Arkiv" as an idea nobody has built.
+- **Arkiv itself lists it as unbuilt.** The Arkiv ecosystem page names "OpenTrigger: a worker network that reacts to expiration or state changes and writes signed receipts back to Arkiv" as an idea nobody has built.
 - **A real builder asked for it this week.** Vansh, building solo for this hackathon, asked in Discord whether a native expiry event is coming, because he's writing his own watcher to track expiresAt and confirm at the deadline.
 
 The gap has three layers, and nothing covers any of them today:
@@ -196,7 +196,7 @@ Self-hosters can use our hosted dashboard with their own worker. They just choos
 Before connecting a wallet it explains the product in one screen:
 
 ```
-            Do something when data on Arkiv changes.
+            Rules on Arkiv. Actions on time.
    Pick what should happen on Arkiv, pick Telegram, and your phone tells you.
 
                     [ Connect wallet ]   [ Read the docs ]
@@ -353,7 +353,7 @@ Who fires this rule?
 ```
 
 - If their worker is offline, the option stays selectable but shows "○ offline, rules will wait until it's back."
-- If the action is Telegram, only our Telegram worker is allowed, and the other options are greyed out with a note: "Telegram messages are sent by the Triggers bot worker." A self-hoster who wants Telegram on their own worker creates their own bot and sets `TG_TOKEN`.
+- If the action is Telegram, only our Telegram worker is allowed, and the other options are greyed out with a note: "Telegram messages are sent by the OpenTrigger bot worker." A self-hoster who wants Telegram on their own worker creates their own bot and sets `TG_TOKEN`.
 
 **Two wallets, never one:** the main wallet (MetaMask) creates rules and signs the link. The worker's wallet lives only on the server and signs claims, receipts and heartbeats. If a server is ever hacked, only a little test GLM is at risk.
 

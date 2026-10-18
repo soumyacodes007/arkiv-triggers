@@ -1,4 +1,8 @@
-# Hand-off: arkiv-triggers (17 Oct 2026)
+# Hand-off: OpenTrigger (17 Oct 2026)
+
+What this repo is, what works, how it was proven, and what is left. The spec is [PRD.md](PRD.md);
+working rules are in [AGENTS.md](AGENTS.md). This is repo 1 of 2: the npm package (SDK + worker +
+CLI) and the Docker image. The dashboard is a separate repo and is not started here.
 
 ## Worker recovery build (19 Oct 2026)
 
@@ -10,6 +14,34 @@ Validation before deployment: 31 unit tests, TypeScript checking and the product
 What this repo is, what works, how it was proven, and what is left. The spec is [PRD.md](PRD.md);
 working rules are in [AGENTS.md](AGENTS.md). This is repo 1 of 2: the npm package (SDK + worker +
 CLI) and the Docker image. The dashboard is a separate repo and is not started here.
+
+## Deployment update (18 Oct 2026)
+
+- Dashboard: https://arkiv-triggers-dashboard.vercel.app (Vercel production).
+- Public worker: [Railway project](https://railway.com/project/b94f9921-7295-497f-a518-bc7215ea5967),
+  service `public-worker`, production, one replica in `sfo`, worker-b
+  `0xf856952A77F9439a55Ad418f5BB3928f4CE807Db`. Keep this wallet off local workers.
+- Health: https://public-worker-production.up.railway.app/healthz. Dockerfile:
+  `docker/worker.Dockerfile`; restart `ALWAYS`; serverless disabled. `PORT`, `OPERATOR`
+  and `OPERATOR_SIG` are not set as service variables.
+- Deployment used Railway CLI with a clean archive of GitHub main `2765d01`, plus the
+  local Telegram polling fix below. Railway's GitHub integration cannot access this
+  repo; configuring its GitHub App reaches a GitHub verification prompt. Automatic
+  deploys from GitHub are not connected. No GitHub push was made for this fix.
+- Secrets were copied directly from `.env.local` using stdin, without printing values.
+  The existing Arkiv access key was reused (26% quota used at deployment); a dedicated
+  worker-only key is still preferable.
+- Runtime logs exposed a Telegram linking bug: `getUpdates` asks Telegram to wait 25 s,
+  but shared HTTP requests aborted after 10 s. Polling now has a 35 s timeout; message
+  delivery keeps its 10 s per-attempt limit. All 26 unit tests, type checking and build
+  passed. No real Telegram test message was sent during this deployment.
+- The previous deployment was fully removed before starting the replacement to avoid
+  two processes using worker-b. Active deployment: `afa47b95-d747-416a-b92f-e57838ddc6bb`.
+- Final deployment validation: `/healthz` returned 200; `test:live:deployed` passed 4/4
+  (live heartbeat, exactly one `ok` receipt signed by worker-b, one block after deadline).
+  Runtime logs remained free of the earlier Telegram polling timeout errors.
+
+The remaining sections describe the earlier 17 Oct handoff and may predate these deployments.
 
 ## State in one table
 

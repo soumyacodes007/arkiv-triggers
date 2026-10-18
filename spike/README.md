@@ -11,6 +11,7 @@ themselves where they can.
 | `03-claim-race.ts` | Can "oldest claim wins" be decided from a query when claims share a block? |
 | `04-heartbeat-patch.ts` | How do we renew a heartbeat in place (patch + extend)? Why did `patchEntity` say "nothing to apply"? |
 | `05-batch-order.ts` | Does `executeBatch` return `createdEntities` in the order of `creates`? |
+| `07-query-latency.ts` | How long do Arkiv queries take at the head and at past blocks right now? (friction #15) |
 
 Run one with `npx tsx spike/<name>.ts`.
 

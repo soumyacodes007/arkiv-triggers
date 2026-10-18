@@ -20,6 +20,28 @@ export function describeError(e: unknown, max = 200): string {
   return [head, err?.status && `status ${err.status}`, details].filter(Boolean).join(" · ").slice(0, max)
 }
 
+/**
+ * A fetch for Arkiv RPC that retries gateway errors (502/503/504) twice and never a 429. viem's own
+ * retry honours Retry-After, and an exhausted Arkiv budget sends Retry-After: 3217 (about 54 minutes),
+ * so one request could stall a worker for close to an hour (friction #10).
+ */
+export const patientFetch: typeof fetch = async (input, init) => {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(input, init)
+    if (attempt < 2 && (res.status === 502 || res.status === 503 || res.status === 504)) {
+      await res.body?.cancel()
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
+      continue
+    }
+    return res
+  }
+}
+
+/** viem http() options for Arkiv: 30 s per request, gateway errors retried, 429 never waited out. */
+export function rpcOptions(headers?: Record<string, string>) {
+  return { retryCount: 0, timeout: 30_000, fetchFn: patientFetch, ...(headers ? { fetchOptions: { headers } } : {}) }
+}
+
 /** Pages through a query pinned to one block (Arkiv cursors belong to the block they were read at). */
 export async function pageAll<T>(
   reader: any,

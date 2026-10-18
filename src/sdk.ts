@@ -23,7 +23,7 @@ import {
   ruleWarnings,
 } from "./schema"
 import { followEvents } from "./feed"
-import { pageAll } from "./query"
+import { describeError, pageAll, rpcOptions } from "./query"
 import { type BlockClock, toBlock as blockAt, toDate as dateAt } from "./time"
 
 export const DEFAULT_RPC_URL = "https://rpc.tiramisu.db-chain.testnet.arkiv.network"
@@ -87,7 +87,7 @@ export function createTriggers(opts: TriggersOptions = {}) {
   const rpcUrl = opts.rpcUrl ?? DEFAULT_RPC_URL
   const wsUrl = opts.wsUrl ?? DEFAULT_WS_URL
   const headers = opts.accessKey ? { "X-API-KEY": opts.accessKey } : undefined
-  const reader: any = opts.publicClient ?? createPublicClient({ chain: tiramisu, transport: http(rpcUrl, headers ? { fetchOptions: { headers } } : {}) })
+  const reader: any = opts.publicClient ?? createPublicClient({ chain: tiramisu, transport: http(rpcUrl, rpcOptions(headers)) })
 
   function wallet(): Writer {
     if (!opts.wallet) throw new TriggersError("pass a wallet to createTriggers({ wallet }) to create or delete rules")
@@ -102,15 +102,23 @@ export function createTriggers(opts: TriggersOptions = {}) {
     try {
       const e = await reader.getEntity(target)
       return e.expiresAt as bigint
-    } catch {
-      return undefined
+    } catch (e) {
+      // Only "no such entity" means gone. A refused or failed read (an exhausted quota, a timeout) is
+      // reported as itself, not as a missing target.
+      if ((e as Error)?.name === "NoEntityFoundError") return undefined
+      throw new TriggersError(`could not read target ${target}: ${describeError(e)}`)
     }
   }
 
   async function prepare(input: RuleInput) {
     const withApp = { app: opts.app, ...input }
     if (input.trigger.on !== "expire") return ruleToCreate(withApp)
-    const exp = await targetExpiresAt(input.trigger.target)
+    // A target created a moment ago can be missing from reads for a second or two (friction #5).
+    let exp = await targetExpiresAt(input.trigger.target)
+    for (let i = 0; i < 8 && exp === undefined; i++) {
+      await new Promise((r) => setTimeout(r, 1_250))
+      exp = await targetExpiresAt(input.trigger.target)
+    }
     if (exp === undefined) throw new TriggersError(`target ${input.trigger.target} was not found: it has expired, been deleted, or never existed`)
     return ruleToCreate(withApp, { targetExpiresAt: exp })
   }

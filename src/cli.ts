@@ -12,6 +12,8 @@ import { createPublicClient } from "@arkiv-network/sdk"
 import { tiramisu } from "@arkiv-network/sdk/chains"
 import { type Hex, formatEther, http, isAddress, isHex } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
+import { rpcOptions } from "./query"
+import { watchProgress } from "./progress"
 import { WORKER_VERSION, startWorker } from "./worker"
 
 const FAUCET = "https://hub.arkiv.network/faucet"
@@ -26,7 +28,7 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, async () => {
     if (stopping || !shutdown) process.exit(stopping ? 1 : 0) // a second signal forces it; nothing to finish yet
     stopping = true
-    console.log(`[arkiv-triggers] ${sig}: finishing actions in flight…`)
+    console.log(`[OpenTrigger] ${sig}: finishing actions in flight…`)
     await shutdown()
     process.exit(0)
   })
@@ -34,7 +36,8 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 
 const arg = process.argv[2]
 if (arg === "-h" || arg === "--help" || arg === "help") {
-  console.log(`arkiv-triggers worker (${WORKER_VERSION})
+  console.log(`OpenTrigger worker (${WORKER_VERSION})
+Rules on Arkiv. Actions on time.
 
   npx arkiv-triggers            run a worker (reads the environment, then ./.env)
   npx arkiv-triggers new-key    print a new wallet to use as WORKER_KEY
@@ -81,7 +84,7 @@ async function main() {
   const accessKey = env("ARKIV_ACCESS_KEY")
   if (!accessKey) {
     console.warn(
-      "[arkiv-triggers] ARKIV_ACCESS_KEY is not set: this worker uses Arkiv's anonymous query budget, which a busy worker can exhaust (queries then stall). Get a key at https://hub.arkiv.network/api-keys.",
+      "[OpenTrigger] ARKIV_ACCESS_KEY is not set: this worker uses Arkiv's anonymous query budget, which a busy worker can exhaust (queries then stall). Get a key at https://hub.arkiv.network/api-keys.",
     )
   }
   const rpcUrl = env("ARKIV_RPC_URL")
@@ -90,15 +93,22 @@ async function main() {
   const address = privateKeyToAccount(key as Hex).address
   const reader = createPublicClient({
     chain: tiramisu,
-    transport: http(rpcUrl ?? tiramisu.rpcUrls.default.http[0], accessKey ? { fetchOptions: { headers: { "X-API-KEY": accessKey } } } : {}),
+    transport: http(rpcUrl ?? tiramisu.rpcUrls.default.http[0], rpcOptions(accessKey ? { "X-API-KEY": accessKey } : undefined)),
   })
   const balance = await reader.getBalance({ address })
   if (balance === 0n) return fail(`Worker ${address} has no test GLM yet. Fund it at ${FAUCET}, then start again.`)
 
   // The worker handles its own errors; this only keeps a stray one (a network blip) from ending the process.
-  process.on("unhandledRejection", (e) => console.error(`[arkiv-triggers] unhandled: ${(e as Error)?.message ?? e}`))
+  process.on("unhandledRejection", (e) => console.error(`[OpenTrigger] unhandled: ${(e as Error)?.message ?? e}`))
 
 
+  let readProgress = () => 0n
+  const watchdog = watchProgress(() => readProgress(), () => {
+    console.error(`[OpenTrigger] firing loop made no block progress for ${STUCK_MS / 1000} s; exiting for the supervisor to restart`)
+    // End this process before a replacement can use the same wallet. A timed-out Promise alone
+    // does not cancel an old pass, which could otherwise resume and write beside the new pass.
+    process.exit(1)
+  }, STUCK_MS)
   const worker = await startWorker({
     privateKey: key as Hex,
     mode,
@@ -109,30 +119,23 @@ async function main() {
     rpcUrl,
     wsUrl: env("ARKIV_WS_URL"),
   })
-  console.log(`[arkiv-triggers] balance ${formatEther(balance)} GLM · ${EXPLORER}${address}`)
-  console.log(`[arkiv-triggers] seal key ${worker.sealKey}`)
-
-  // The loop is healthy while lastBlock keeps moving (a stuck RPC or a dead loop stops it).
-  let seen = worker.stats().lastBlock
-  let movedAt = Date.now()
-  const watchdog = setInterval(() => {
-    const now = worker.stats().lastBlock
-    if (now !== seen) [seen, movedAt] = [now, Date.now()]
-  }, 5_000)
+  readProgress = () => worker.stats().lastBlock
+  console.log(`[OpenTrigger] balance ${formatEther(balance)} GLM · ${EXPLORER}${address}`)
+  console.log(`[OpenTrigger] seal key ${worker.sealKey}`)
 
   const port = Number(env("PORT"))
   const server = port
     ? createServer((req, res) => {
         if (req.url !== "/healthz") return void res.writeHead(404).end()
         const s = worker.stats()
-        const ok = Date.now() - movedAt < STUCK_MS
+        const ok = watchdog.healthy()
         res.writeHead(ok ? 200 : 503, { "content-type": "application/json" })
         res.end(JSON.stringify({ ok, worker: worker.address, version: WORKER_VERSION, ...s, lastBlock: String(s.lastBlock) }))
-      }).listen(port, () => console.log(`[arkiv-triggers] health check on :${port}/healthz`))
+      }).listen(port, () => console.log(`[OpenTrigger] health check on :${port}/healthz`))
     : undefined
 
   shutdown = async () => {
-    clearInterval(watchdog)
+    watchdog.stop()
     server?.close()
     await worker.stop()
   }

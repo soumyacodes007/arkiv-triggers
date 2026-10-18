@@ -1,6 +1,6 @@
 {
   "name": "arkiv-triggers",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Database triggers for Arkiv: when an entity expires or a time arrives, open-source workers send a Telegram message, call a webhook or record a receipt, and sign a receipt anyone can check.",
   "license": "MIT",
   "repository": {

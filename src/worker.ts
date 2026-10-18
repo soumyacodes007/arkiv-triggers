@@ -36,11 +36,11 @@ import {
   receiptToCreate,
 } from "./schema"
 import { followEvents } from "./feed"
-import { describeError, pageAll } from "./query"
+import { describeError, pageAll, rpcOptions } from "./query"
 import { workerSealKeys } from "./seal"
 import { type BlockClock, toDate } from "./time"
 
-export const WORKER_VERSION = "arkiv-triggers/0.1.1"
+export const WORKER_VERSION = "arkiv-triggers/0.1.2"
 const DEFAULT_RPC_URL = "https://rpc.tiramisu.db-chain.testnet.arkiv.network"
 const DEFAULT_WS_URL = "wss://rpc.tiramisu.db-chain.testnet.arkiv.network"
 /** Where Arkiv emits its entity events. Not exported by the SDK (see arkiv/friction.md). */
@@ -168,12 +168,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const lower = (h: string) => h.toLowerCase()
 
 export async function startWorker(opts: WorkerOptions): Promise<WorkerHandle> {
-  const log = opts.log ?? ((line: string) => console.log(`[arkiv-triggers] ${line}`))
+  const log = opts.log ?? ((line: string) => console.log(`[OpenTrigger] ${line}`))
   const mode = opts.mode ?? "any"
   const account = privateKeyToAccount(opts.privateKey)
   const me = lower(account.address)
   const headers = opts.accessKey ? { "X-API-KEY": opts.accessKey } : undefined
-  const transport = () => http(opts.rpcUrl ?? DEFAULT_RPC_URL, headers ? { fetchOptions: { headers } } : {})
+  const transport = () => http(opts.rpcUrl ?? DEFAULT_RPC_URL, rpcOptions(headers))
   const reader: any = createPublicClient({ chain: tiramisu, transport: transport() })
   const wallet: any = createWalletClient({ chain: tiramisu, transport: transport(), account })
   const writer = new Writer(wallet)
@@ -237,7 +237,10 @@ export async function startWorker(opts: WorkerOptions): Promise<WorkerHandle> {
     try {
       const e = await reader.getEntity(target)
       state = { expiresAt: e.expiresAt as bigint, gone: false, checkedAt: Date.now() }
-    } catch {
+    } catch (e) {
+      // A quota failure or timeout cannot prove expiry. Leave the cached target untouched and
+      // retry the pass rather than firing an action on a target whose state we could not read.
+      if ((e as Error)?.name !== "NoEntityFoundError") throw e
       state = { expiresAt: cached?.expiresAt, gone: true, checkedAt: Date.now() }
     }
     targets.set(k, state)
@@ -461,6 +464,14 @@ export async function startWorker(opts: WorkerOptions): Promise<WorkerHandle> {
     if (stopped || ticking) return // a slow pass (a big rule reload) must not pile up behind itself
     ticking = true
     try {
+      await pass()
+    } finally {
+      ticking = false
+    }
+  }
+
+  async function pass() {
+    {
       const head: bigint = await reader.getBlockNumber()
       const since = Date.now() - lastLoad
       if ((rulesDirty && since >= reloadMs) || since >= 2 * reloadMs) await loadRules()
@@ -486,8 +497,6 @@ export async function startWorker(opts: WorkerOptions): Promise<WorkerHandle> {
       }
       if (due.length) void fireBatch(due, head)
       stats.lastBlock = head
-    } finally {
-      ticking = false
     }
   }
 

@@ -1,6 +1,6 @@
 # Building on Arkiv: friction report
 
-What got in our way while building Arkiv Triggers, and what worked as documented, logged the day we
+What got in our way while building OpenTrigger, and what worked as documented, logged the day we
 hit it. Every entry names the versions and a script that reproduces it.
 
 **Environment for every entry unless noted:** `@arkiv-network/sdk` 0.8.1 · `viem` 2.57.4 · Node 24.13.1 ·
@@ -23,7 +23,7 @@ Tiramisu (chain 7738577) · Windows 11 · 17 Oct 2026. Spike scripts read keys f
 - **What we tried:** created one entity and deleted it, created another with `ExpirationTime.fromBlocks(5)` and let it lapse, then replayed events from before both and called `getEntity` on each.
 - **What happened:** the replay shows `EntityCreated` + `EntityDeleted` for the first and only `EntityCreated` for the second. `getEntity` throws the same `NoEntityFoundError` for both.
 - **What we expected:** an `EntityExpired` event, or at least a `getEntity` error that says "expired at block N" versus "deleted".
-- **Why it matters:** this is the gap Arkiv Triggers exists to fill. A trigger "when this entity expires" must not fire when the owner deleted it early, so a worker has to keep its own record of deletes from the event stream and compare deadlines itself.
+- **Why it matters:** this is the gap OpenTrigger exists to fill. A trigger "when this entity expires" must not fire when the owner deleted it early, so a worker has to keep its own record of deletes from the event stream and compare deadlines itself.
 - **Reproduce:** `npx tsx spike/02-replay-events.ts`.
 - **What would fix it:** an expiry event (even emitted lazily at the next block), or distinct error types.
 - **Our workaround:** the worker schedules each deadline from the target's `$expiresAt`, records `EntityDeleted` events (replaying from its last saved block after a restart), and at the deadline treats "not found and not seen deleted" as expired.
@@ -98,7 +98,7 @@ Tiramisu (chain 7738577) · Windows 11 · 17 Oct 2026. Spike scripts read keys f
 - **What we tried:** running the worker in Docker without `ARKIV_ACCESS_KEY` on 17 Oct, after a day of test runs from the same IP.
 - **What happened:** `eth_blockNumber` and `eth_getBalance` answered in under 2 s, but the first `arkiv_query` never returned: the worker printed nothing for 2+ minutes and its health check went unhealthy. A raw call to the same method returned `HTTP 429 {"error":"ANON_COST_LIMITED","message":"unauthenticated query budget exhausted; get an API key at https://hub.arkiv.network…"}`. Through the SDK there is no error at all: viem's HTTP transport honours `Retry-After` on a 429 and waits it out, even with `timeout: 20_000` set on the transport.
 - **What we expected:** a typed error from the SDK (for example `RateLimitedError` with the reset time), so callers can say "set an access key" instead of appearing frozen.
-- **Why it matters:** a public worker, or a dashboard on the anonymous browser quota (#4), looks dead with no clue why. The budget is cost-based (`Arkiv-Cost: 100` per query here), separate from the `RateLimit: limit=600` header, and its window is not documented.
+- **Why it matters:** a public worker, or a dashboard on the anonymous browser quota (#4), looks dead with no clue why. The budget is cost-based (`Arkiv-Cost: 100` per query here). On 18 Oct an exhausted anonymous budget answered `RateLimit: limit=10000, remaining=0, reset=3217` with `Retry-After: 3217`, so viem's default retry would wait about 54 minutes before failing: that is the "hang". The window and the cost of each method are not documented.
 - **Reproduce:** exhaust the anonymous budget (run the live suites without `ARKIV_ACCESS_KEY` a few times), then run any `select(...)` query; compare with a raw `fetch` of `arkiv_query`, which shows the 429.
 - **Our workaround:** every query in this package fails after 30 s with `QueryTimeoutError` naming the access key (`src/query.ts`); the CLI warns at startup when no access key is set. The dashboard, which cannot hold a key, builds its client with `http(url, { retryCount: 0 })`: then the same 429 surfaces in about 1.5 s as `HttpRequestError` with `details: "ANON_COST_LIMITED"`, and the page shows a "reads are being limited" banner and retries on its own schedule.
 - **Also seen in the browser (18 Oct):** a day of building and screenshotting the dashboard from one IP was enough to exhaust the anonymous budget; one page load costs about 12 calls (5 `arkiv_query`), so a normal visitor is far from it.
@@ -130,6 +130,27 @@ Tiramisu (chain 7738577) · Windows 11 · 17 Oct 2026. Spike scripts read keys f
 - **Reproduce:** `npx tsx spike/06-created-since.ts`. To size a worker, `node spike/count-worker.mjs 420` counts its calls by method.
 - **Our workaround:** the worker reloads rules at most every 30 s (`reloadMs`) and re-reads a watched entity every 10 minutes unless it is within 10 minutes of its deadline, since extensions and deletes arrive as events; it always re-reads before firing. Measured: 67 `arkiv_query` calls in 7 minutes with about 430 rules on the chain, firing included, against several a second before. The cost is up to 30 s of latency for a rule created less than half a minute before its deadline. The SDK's `listRules` no longer reads the target of a rule that already has a receipt.
 
+### 14. viem's default client waits out a 54-minute Retry-After, and it froze our public worker for hours
+
+- **Versions:** `@arkiv-network/sdk` 0.8.1, `viem` 2.57.4, Node 22 (Railway, `docker/worker.Dockerfile`), Tiramisu.
+- **What we tried:** our public worker on Railway, built with the SDK's `createPublicClient({ transport: http(url) })` as the docs show, with an access key that a day of test runs had brought to 99% of its quota.
+- **What happened:** on 18 Oct its `/healthz` reported `"ok": false` and `"lastBlock": "734228"` while the chain head was 738646: about 4,400 blocks (2.5 hours) behind, and not moving. When the budget runs out, Arkiv answers 429 with `Retry-After: 3217`. viem's `http()` transport retries 3 times by default and honours `Retry-After`, so one call (any method, not only `arkiv_query`) can wait close to an hour before it fails. Our loop does one pass at a time, so every later pass was skipped while that one call waited. Nothing errored and nothing was logged.
+- **What we expected:** an SDK client that fails fast on a quota 429, or docs that warn that `http()`'s defaults will wait out Arkiv's `Retry-After`.
+- **Why it matters:** any long-running Arkiv process built the documented way (a worker, an indexer, a bot) freezes silently for hours when its budget runs out, and looks healthy until someone checks its progress.
+- **Reproduce:** exhaust a budget (anonymous is quickest; see #10), then time `createPublicClient({ chain: tiramisu, transport: http(url) }).getEntity(key)`: it does not return for many minutes. Compare `curl -D - …` on the same request, which answers 429 with `retry-after: 3217` at once. The unit test "Arkiv RPC: gateway errors are retried, a 429 is returned at once" in `test/sdk-unit.test.ts` checks our replacement.
+- **What would fix it:** a typed `QuotaExceededError` from the SDK, raised at once, with the reset time; or SDK clients created with `retryCount: 0` for 429 by default.
+- **Our workaround:** every client in this package (`src/query.ts` `rpcOptions`) uses `retryCount: 0`, a 30 s timeout and a fetch that retries only 502/503/504; the CLI exits after 2 minutes without completed block progress and the supervisor starts a fresh process, so an abandoned pass cannot resume beside a replacement; `getEntity` failures other than `NoEntityFoundError` are reported as themselves, not as "target not found". A production worker also needs a key of its own (#12).
+
+### 15. Query latency swings from 1 s to 30 s, and the gateway then answers 504
+
+- **Versions:** `@arkiv-network/sdk` 0.8.1, `viem` 2.57.4, Node 24, Tiramisu; with an access key and anonymously.
+- **What we tried:** small `arkiv_query` calls (key-only selection, a few rows) at the head and at past blocks, from 13:00 to 13:40 IST on 18 Oct.
+- **What happened:** `eth_blockNumber` answered in under 1 s throughout. `arkiv_query` took 4.8–9.3 s at the head and 3.8–30.4 s at past blocks; at a block about 500 back, two runs in a row ran 30 s and returned **HTTP 504** from the gateway. Anonymous requests were just as slow (4.8–25.4 s). The same queries took about 1 s that morning. With viem's default 10 s timeout, most of these reads fail as `TimeoutError`.
+- **What we expected:** query latency close to `eth_blockNumber`'s, a documented slow tier for historical reads, or a 503 with `Retry-After` instead of a 30 s gateway timeout.
+- **Why it matters:** a worker's loop, a dashboard's first paint and any proof check that reads state at a past block all wait on these reads; a 10 s default timeout turns a slow node into errors everywhere.
+- **Reproduce:** `npx tsx spike/07-query-latency.ts` (or `ANON=1 npx tsx spike/07-query-latency.ts`) times `eth_blockNumber` and the same query at the head, 5 blocks back and 500 blocks back.
+- **Our workaround:** a 30 s timeout per request and two retries on 502/503/504 (`src/query.ts`); the worker reads at the head wherever it can.
+
 ## What went smoothly (tested the same way)
 
 | Tested | Expected | Happened | Script |
@@ -145,3 +166,12 @@ Tiramisu (chain 7738577) · Windows 11 · 17 Oct 2026. Spike scripts read keys f
 | `getBlockTiming` as a date↔block clock | Current block and time | Within 1–2 s of the local clock, `blockDuration` 2 | `npm run test:live:sdk` |
 | `str()` length guard | Over-long values refused | The SDK refuses a 129-byte `str` before sending, with a message pointing at the payload | `test/schema.test.ts` |
 | `executeBatch` return value | The new keys | `createdEntities` lists them in batch order | `npm run test:live:sdk` |
+
+
+### 16. Heartbeat renewal can hide a stalled firing loop (19 Oct 2026)
+
+- **Versions:** @arkiv-network/sdk 0.8.1, viem 2.57.4, deployed worker arkiv-triggers/0.1.1 on Railway.
+- **Observed:** /healthz returned HTTP 503 with lastBlock 734228 while the heartbeat continued to renew. The Arkiv Hub showed the shared access key at 100% monthly quota.
+- **Cause:** default transport retries can wait out the node's long Retry-After. Heartbeat progress alone does not show that deadlines are being processed. A Promise.race timeout cannot cancel its losing pass.
+- **Fix:** RPC clients never retry 429; gateway retries remain bounded by the request timeout. The CLI watches startup and completed block progress and exits after 120 seconds without progress; Railway must use restart policy ALWAYS. Keep tick serialization until the pass actually finishes, and never treat quota failures as a missing target.
+- **Checks:** test/progress.test.ts covers stalled, advancing, and stopped watchdogs; test/sdk-unit.test.ts covers gateway retries and a quota refusal through the actual viem transport.

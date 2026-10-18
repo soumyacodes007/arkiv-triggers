@@ -1,5 +1,12 @@
 # Hand-off: arkiv-triggers (17 Oct 2026)
 
+## Worker recovery build (19 Oct 2026)
+
+Build 0.1.2 uses fail-fast 429 handling and a supervisor restart after 120 seconds without completed block progress, including startup. It keeps one tick active until it finishes; it does not start overlapping passes after a Promise timeout. Target read failures remain errors unless Arkiv returns NoEntityFoundError. Railway must have restart policy ALWAYS and exactly one replica. A new worker-specific access key is configured separately in Railway, never in this repository.
+
+Validation before deployment: 31 unit tests, TypeScript checking and the production build passed. A read using the Railway-configured key succeeded.
+
+
 What this repo is, what works, how it was proven, and what is left. The spec is [PRD.md](PRD.md);
 working rules are in [AGENTS.md](AGENTS.md). This is repo 1 of 2: the npm package (SDK + worker +
 CLI) and the Docker image. The dashboard is a separate repo and is not started here.

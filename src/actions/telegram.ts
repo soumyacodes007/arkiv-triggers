@@ -11,12 +11,12 @@ const TIMEOUT_MS = 10_000
 /** All attempts of one firing together, well inside the claim lease (as for webhooks). */
 const BUDGET_MS = 30_000
 
-async function call(fetchFn: typeof fetch, token: string, method: string, body: unknown) {
+async function call(fetchFn: typeof fetch, token: string, method: string, body: unknown, timeoutMs = TIMEOUT_MS) {
   const res = await fetchFn(`${API}/bot${token}/${method}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   })
   const json = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: any; description?: string }
   return { status: res.status, json }
@@ -71,14 +71,15 @@ export function startTelegramLinking(token: string, opts: { fetch?: typeof fetch
   void (async () => {
     while (!stopped) {
       try {
-        const { json } = await call(fetchFn, token, "getUpdates", { offset, timeout: 25, allowed_updates: ["message"] })
+        // Telegram may hold an idle poll for 25 s; leave time for its response to arrive.
+        const { json } = await call(fetchFn, token, "getUpdates", { offset, timeout: 25, allowed_updates: ["message"] }, 35_000)
         for (const u of json.result ?? []) {
           offset = u.update_id + 1
           const msg = u.message
           if (msg?.text?.trim().startsWith("/start")) {
             await call(fetchFn, token, "sendMessage", {
               chat_id: msg.chat.id,
-              text: `Your Arkiv Triggers chat code is ${msg.chat.id}\n\nPaste it into the dashboard. It is sealed so only the Triggers worker can read it; it never goes on Arkiv in plain text.`,
+              text: `Your OpenTrigger chat code is ${msg.chat.id}\n\nPaste it into the dashboard. It is sealed so only the OpenTrigger worker can read it; it never goes on Arkiv in plain text.`,
             })
             opts.log?.("answered a /start with a chat code")
           }
